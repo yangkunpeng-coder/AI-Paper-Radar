@@ -11,7 +11,7 @@
 
 [**⬇ 下载 v1.2.0 · Windows / Android**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.2.0)
 &nbsp;&nbsp;·&nbsp;&nbsp;
-[**▶ 平板操作演示**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.0.0-demo_tablet.mp4)
+[**▶ 平板操作演示**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.1.0-demo_tablet.mp4)
 &nbsp;&nbsp;·&nbsp;&nbsp;
 [**📦 所有 Releases**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases)
 
@@ -47,9 +47,9 @@
 
 ![论文自动检索分析 Android 平板界面](assets/screenshot_tablet.jpg)
 
-[▶ 查看 / 下载平板操作录屏](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.0.0-demo_tablet.mp4)
+[▶ 查看 / 下载平板操作录屏](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.1.0-demo_tablet.mp4)
 
-平板操作录屏作为 v1.2.0 Release 附件提供，文件名为 `AI-Paper-Radar-v1.0.0-demo_tablet.mp4`。录屏上传并发布后，上方链接即可使用；如无法直接播放，请下载后观看。
+平板操作录屏作为 v1.2.0 Release 附件提供，文件名为 `AI-Paper-Radar-v1.1.0-demo_tablet.mp4`。如无法直接播放，请下载后观看。
 
 ---
 
@@ -151,7 +151,7 @@ DeepSeek 功能需要用户自行提供 API Key。
 | 平台 | 演示 |
 |---|---|
 | Windows | [v1.0.0 完整操作演示](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.0.0/AI-Paper-Radar-v1.0.0-demo.mp4) |
-| Android 平板 | [平板操作录屏](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.0.0-demo_tablet.mp4) |
+| Android 平板 | [平板操作录屏](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.1.0-demo_tablet.mp4) |
 
 演示可用于了解软件启动、研究领域切换、论文同步、筛选、论文详情和分析等使用流程。不同版本和平台的界面可能有所差异，请以实际安装版本为准。
 
@@ -214,7 +214,7 @@ certutil -hashfile "实际下载的文件名.apk" SHA256
 
 [**下载 v1.2.0 · Windows / Android**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.2.0)
 &nbsp;&nbsp;·&nbsp;&nbsp;
-[**平板演示**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.0.0-demo_tablet.mp4)
+[**平板演示**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.1.0-demo_tablet.mp4)
 &nbsp;&nbsp;·&nbsp;&nbsp;
 [**所有 Releases**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases)
 

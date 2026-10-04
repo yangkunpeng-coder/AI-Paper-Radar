@@ -4,14 +4,14 @@
 
 **AI Paper Auto Retrieval & Analysis**
 
-面向研究人员的 Windows 桌面论文工具：  
+面向研究人员的 Windows 桌面与 Android 平板论文工具：<br>
 **自动检索 arXiv · 本地管理 · DeepSeek 快速解读 · 收藏筛选 · Excel / Markdown 导出**
 
 <br>
 
-[**⬇ 下载 Windows v1.0.0**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.0.0)
+[**⬇ 下载 v1.2.0 · Windows / Android**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.2.0)
 &nbsp;&nbsp;·&nbsp;&nbsp;
-[**▶ 查看软件演示**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.0.0/AI-Paper-Radar-v1.0.0-demo.mp4)
+[**▶ 平板操作演示**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.0.0-demo_tablet.mp4)
 &nbsp;&nbsp;·&nbsp;&nbsp;
 [**📦 所有 Releases**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases)
 
@@ -21,7 +21,7 @@
 
 ## 一分钟了解
 
-这是一款用于 **自动发现、整理和快速理解 arXiv 论文** 的 Windows 桌面软件。
+这是一款用于 **自动发现、整理和快速理解 arXiv 论文** 的跨平台软件，可在 Windows 电脑和 Android 平板上使用。
 
 当前支持三个研究领域：
 
@@ -31,14 +31,25 @@
 
 软件将论文保存在本地 SQLite 数据库中，并可按时间、研究方向、收藏状态等条件筛选；如配置自己的 DeepSeek API Key，还可以直接生成论文快速解读。
 
-> **想先看看软件怎么用？**  
-> ▶ [点击查看 v1.0.0 完整操作演示](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.0.0/AI-Paper-Radar-v1.0.0-demo.mp4)
+> **v1.2.0 发布内容：** 新增 Android APK 与平板使用入口，更新 Windows 64 位发行包。下载附件将在 v1.2.0 Release 发布后提供。
 
 ---
 
 ## 软件界面
 
-![论文自动检索分析主界面](assets/screenshot.png)
+### Windows 桌面
+
+![论文自动检索分析 Windows 主界面](assets/screenshot.png)
+
+[▶ 查看 Windows 操作演示（v1.0.0）](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.0.0/AI-Paper-Radar-v1.0.0-demo.mp4)
+
+### Android 平板
+
+![论文自动检索分析 Android 平板界面](assets/screenshot_tablet.jpg)
+
+[▶ 查看 / 下载平板操作录屏](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.0.0-demo_tablet.mp4)
+
+平板操作录屏作为 v1.2.0 Release 附件提供，文件名为 `AI-Paper-Radar-v1.0.0-demo_tablet.mp4`。录屏上传并发布后，上方链接即可使用；如无法直接播放，请下载后观看。
 
 ---
 
@@ -76,43 +87,52 @@
 
 ### 导出
 
-支持将筛选结果导出为：
-
-- **Excel**
-- **Markdown**
+支持将筛选结果导出为 **Excel** 和 **Markdown**。
 
 ---
 
-## 下载
+## 下载与安装
 
-### Windows 正式版
+目标发行版本：**v1.2.0**（待发布）
 
-当前版本：**v1.0.0**
+[**前往 v1.2.0 Release**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.2.0) · [查看已发布版本](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases)
 
-[**前往 GitHub Release 下载**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.0.0)
+v1.2.0 计划提供以下附件，实际文件名以 Release 的 **Assets** 列表为准：
 
-Release 中包含：
+| 平台 | 发行文件 | 使用方式 |
+|---|---|---|
+| Windows 64 位（Intel / AMD） | Windows ZIP 发行包 | 完整解压后，运行目录中的 EXE |
+| Android 平板 | Android APK 安装包 | 下载到平板后安装 |
 
-| 文件 | 用途 |
-|---|---|
-| `AI-Paper-Radar-v1.0.0.exe` | Windows 可执行程序 |
-| `AI-Paper-Radar-v1.0.0-demo.mp4` | 软件完整操作演示 |
-| `SHA256SUMS.txt` | EXE 文件完整性校验 |
+### Windows
 
-> Windows 版为单文件可执行程序，普通用户无需安装 Python 或 Flet。
+1. 在 Release 的 **Assets** 中下载 Windows ZIP 发行包。
+2. **完整解压**到一个文件夹，不要直接在压缩包中运行。
+3. 双击解压目录中的 EXE 启动程序。
+
+> 无需另行安装 Python 或 Flet。请保留 EXE 旁的 DLL、`data`、`Lib`、`site-packages` 等文件和目录，不要仅复制 EXE。v1.2.0 的 Windows 发行方式与 v1.0.0 的单文件 EXE 不同。
+
+### Android 平板
+
+1. 在 Release 的 **Assets** 中下载 APK。
+2. 在平板上打开 APK，按系统提示允许当前浏览器或文件管理器安装应用。
+3. 完成安装后，从桌面打开应用。
+
+已有旧版应用时，建议先尝试覆盖安装，避免因卸载而丢失本地数据。
 
 ---
 
 ## 快速开始
 
-1. 下载 `AI-Paper-Radar-v1.0.0.exe`
-2. 双击运行
-3. 选择 **具身智能 / 智能体 / 大语言模型**
-4. 点击 **同步** 获取论文
-5. 使用时间范围、研究方向和排序条件筛选
-6. 点击论文查看详细信息
-7. 如需 AI 快速解读，在 **设置** 中填写自己的 DeepSeek API Key
-8. 按需收藏论文或导出 Excel / Markdown
+1. 按上述步骤安装并启动对应平台版本。
+2. 选择 **具身智能 / 智能体 / 大语言模型**。
+3. 选择时间范围，点击 **同步** 获取论文。
+4. 使用研究方向、收藏状态和排序条件筛选。
+5. 点击论文查看详细信息，打开 arXiv 页面或 PDF。
+6. 如需 AI 快速解读，在 **设置** 中填写自己的 DeepSeek API Key。
+7. 按需收藏论文或导出 Excel / Markdown。
+
+论文同步、PDF 下载与 AI 分析需要可用的网络连接。若当前日期没有匹配论文，可以扩大检索时间范围。
 
 ---
 
@@ -120,100 +140,82 @@ Release 中包含：
 
 DeepSeek 功能需要用户自行提供 API Key。
 
-- 软件发行包**不包含**开发者 API Key
-- 用户 API Key 保存在本机
-- 不配置 API Key 不影响论文检索、浏览、收藏、筛选和导出
+- 软件发行包**不包含**开发者 API Key。
+- 用户 API Key 保存在本机。
+- 不配置 API Key 不影响论文检索、浏览、收藏、筛选和导出。
 
 ---
 
 ## 软件演示
 
-如果不确定软件是否适合自己的工作流，可以先看操作录屏：
+| 平台 | 演示 |
+|---|---|
+| Windows | [v1.0.0 完整操作演示](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.0.0/AI-Paper-Radar-v1.0.0-demo.mp4) |
+| Android 平板 | [平板操作录屏](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.0.0-demo_tablet.mp4) |
 
-### ▶ [查看 AI Paper Radar v1.0.0 操作演示](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.0.0/AI-Paper-Radar-v1.0.0-demo.mp4)
-
-演示包括：
-
-- 软件启动
-- 三个研究领域切换
-- arXiv 同步
-- 时间 / 研究方向 / 排序筛选
-- 论文详情
-- DeepSeek 快速解读
-- 收藏
-- Excel / Markdown 导出
+演示可用于了解软件启动、研究领域切换、论文同步、筛选、论文详情和分析等使用流程。不同版本和平台的界面可能有所差异，请以实际安装版本为准。
 
 ---
 
 ## 系统要求
 
-- **Windows 10 / Windows 11**
-- **64 位系统**
-- 论文同步需要互联网连接
-- DeepSeek 分析需要互联网连接及用户自己的 DeepSeek API Key
+| 平台 | 要求 |
+|---|---|
+| Windows | Windows 10 / Windows 11，Intel / AMD 64 位系统 |
+| Android | 支持安装发行 APK 的 Android 平板；具体系统版本与架构要求以 Release 说明为准 |
+
+- 论文同步和 PDF 下载需要互联网连接。
+- DeepSeek 分析需要互联网连接及用户自己的 DeepSeek API Key。
+- 本地论文库、收藏和设置分别保存在各自设备上。
 
 ---
 
 ## 文件完整性校验
 
-`AI-Paper-Radar-v1.0.0.exe`
+如 Release 附带 `SHA256SUMS.txt`，请使用**同一版本**的校验文件核对下载包。
 
-SHA256：
-
-```text
-04113bc119848f4706069defb46cac8b852b978c882be59c2d260f449e6d55be
-```
-
-Release 中同时提供：
-
-`SHA256SUMS.txt`
-
-Windows CMD 校验：
+Windows CMD 示例（将文件名替换为实际下载的 ZIP 或 APK）：
 
 ```cmd
-certutil -hashfile AI-Paper-Radar-v1.0.0.exe SHA256
+certutil -hashfile "实际下载的文件名.zip" SHA256
+certutil -hashfile "实际下载的文件名.apk" SHA256
 ```
 
-输出应与上面的 SHA256 完全一致。
-
----
-
-## Windows 安全提示
-
-当前 v1.0.0 暂未进行 Windows 代码签名。
-
-因此首次启动时，Microsoft Defender SmartScreen 可能显示 **“未知发布者”** 或相关安全提示。对于尚未进行代码签名的新 Windows 桌面应用，这是常见情况。
-
-建议：
-
-- 仅从本项目 GitHub Releases 页面下载
-- 下载后使用 SHA256 校验文件完整性
+输出应与该版本提供的 SHA256 一致。仓库中原有的 `SHA256SUMS.txt` 对应 v1.0.0，不能用于校验 v1.2.0 的新发行包。
 
 ---
 
 ## 数据与隐私
 
-- 论文数据库保存在用户本机
-- 收藏、设置和分析结果保存在用户本机
-- 软件发行包不会预置用户私有数据
-- 软件发行包不会包含开发者 DeepSeek API Key
+- 论文数据库保存在用户本机。
+- 收藏、设置和分析结果保存在用户本机。
+- 软件发行包不会预置用户私有数据。
+- 软件发行包不会包含开发者 DeepSeek API Key。
 
 ---
 
-## 当前版本
+## 版本记录
 
-**v1.0.0**
+### v1.2.0（待发布）
 
-AI Paper Auto Retrieval & Analysis 的首个 Windows 正式公开版本。
+- 新增 Android APK，支持在平板上使用。
+- 更新 Windows 64 位版本，采用完整目录 ZIP 发行包。
+- 新增平板界面截图和操作录屏展示。
+
+### v1.0.0
+
+首个 Windows 正式公开版本，提供单文件 EXE 和 Windows 操作演示。
+
+[查看 v1.0.0 Release](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.0.0)
 
 ---
 
 <div align="center">
 
-[**下载 v1.0.0**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.0.0)
+[**下载 v1.2.0 · Windows / Android**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.2.0)
 &nbsp;&nbsp;·&nbsp;&nbsp;
-[**查看演示**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.0.0/AI-Paper-Radar-v1.0.0-demo.mp4)
+[**平板演示**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.0.0-demo_tablet.mp4)
 &nbsp;&nbsp;·&nbsp;&nbsp;
-[**Releases**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases)
+[**所有 Releases**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases)
 
 </div>

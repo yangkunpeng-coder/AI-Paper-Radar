@@ -1,4 +1,65 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+output/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
 .flet/
+*.egg-info/
 *.exe
 *.mp4
-SHA256SUMS.txt
+*.zip
+*.apk
+*.aab
+tablet_crash_log.txt
+tablet_runtime_log.txt
+
+# Local development material (not included in public source)
+/tests/
+/tools/
+/workflow/
+/project_specs/
+/Project Practices/
+/AI_ENTRY.md
+/tablet_prime.cmd
+/AI-Paper-Radar-v0.8.25.spec
+/AI-Paper-Radar-v1.0.0.spec
+
+# Local databases and signing keys
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.jks
+*.keystore
+*.pfx
+
+# Historical build configurations
+/AI-Paper-Radar-v0.8.25.spec
+/AI-Paper-Radar-v1.0.0.spec
+
+# Local backups and tool settings
+/workflow/backup/
+/tools/adb_tool_config.txt
+
+# Local databases
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+
+# Signing keys
+*.jks
+*.keystore
+*.pfx

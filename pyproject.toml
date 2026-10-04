@@ -1,0 +1,49 @@
+[project]
+name = "embodied-ai-radar"
+version = "1.2.15"
+description = "Cross-platform Flet app for automatic AI paper retrieval, filtering, analysis, and export."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "flet==1.0.1",
+    "flet-secure-storage==1.0.1",
+    "flet-webview==1.0.1",
+    "requests>=2.32,<3",
+    "PyMuPDF==1.27.2.3",
+    "XlsxWriter>=3.2,<4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "flet[test]==1.0.1",
+    "pytest>=8.0,<9",
+    "ruff>=0.12,<1",
+]
+
+[tool.flet]
+bundle_id = "com.flet.embodied_ai_radar"
+
+[tool.flet.app]
+path = "src"
+module = "main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["build", "dist", "output"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.flet.android.manifest_application]
+allowBackup = "false"
+fullBackupContent = "false"

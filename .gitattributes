@@ -1,0 +1,6 @@
+# Keep Python source consistent across Windows and other platforms.
+*.py text eol=lf
+
+# Windows command scripts use CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf

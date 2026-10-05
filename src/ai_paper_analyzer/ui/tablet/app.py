@@ -10,12 +10,13 @@ Material 3 adaptive principles:
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
 from bisect import bisect_right
+from collections import OrderedDict
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-import logging
 from datetime import UTC, datetime, timedelta
-import time
 from threading import Event
 
 import flet as ft
@@ -32,7 +33,7 @@ from ai_paper_analyzer.application.sync_execution import (
 )
 from ai_paper_analyzer.application.sync_service import DailySyncGate
 from ai_paper_analyzer.domain.library import LibraryPaper, LibraryViewCounts, base_arxiv_id
-from ai_paper_analyzer.domain.llm import PaperAIAnalysis, SUPPORTED_DEEPSEEK_MODELS
+from ai_paper_analyzer.domain.llm import SUPPORTED_DEEPSEEK_MODELS, PaperAIAnalysis
 from ai_paper_analyzer.domain.research_domains import (
     RESEARCH_DOMAINS,
     TOPIC_ALL,
@@ -96,6 +97,8 @@ LIST_COMPACT_IDLE_SECONDS = 0.65
 SYNC_HEAD_REFRESH_LIMIT = PAGE_SIZE * 3
 SYNC_LIVE_MUTATION_MAX_OFFSET = LIST_ITEM_EXTENT * 6
 PDF_RENDER_RADIUS = 1
+PDF_PNG_CACHE_PAGES = 5
+PDF_PNG_CACHE_BYTES = 16 * 1024 * 1024
 TASK_SHEET_REFRESH_INTERVAL = 0.25
 SORT_LABELS = {
     SORT_INTEREST: "方向相关度优先",
@@ -240,7 +243,7 @@ async def main(page: ft.Page) -> None:
     reader_pdf_page_starts: list[float] = []
     reader_pdf_rendered_pages: set[int] = set()
     reader_pdf_rendering_pages: set[int] = set()
-    reader_pdf_page_pngs: dict[int, bytes] = {}
+    reader_pdf_page_pngs: OrderedDict[int, bytes] = OrderedDict()
     reader_pdf_focus_index = 0
     reader_pdf_scroll_direction = 1
     reader_pdf_requested_focus = 0
@@ -884,6 +887,17 @@ async def main(page: ft.Page) -> None:
             filter_quality=ft.FilterQuality.HIGH,
         )
 
+    def remember_pdf_png(page_index: int, png: bytes) -> None:
+        if len(png) > PDF_PNG_CACHE_BYTES:
+            return
+        reader_pdf_page_pngs[page_index] = png
+        reader_pdf_page_pngs.move_to_end(page_index)
+        while (
+            len(reader_pdf_page_pngs) > PDF_PNG_CACHE_PAGES
+            or sum(map(len, reader_pdf_page_pngs.values())) > PDF_PNG_CACHE_BYTES
+        ):
+            reader_pdf_page_pngs.popitem(last=False)
+
     async def _render_pdf_neighborhood(generation: int, focus_index: int) -> None:
         """Render one latest-focus neighborhood; older scroll requests are coalesced."""
 
@@ -916,15 +930,29 @@ async def main(page: ft.Page) -> None:
                 continue
             reader_pdf_rendering_pages.add(page_index)
             try:
-                png = await asyncio.to_thread(
-                    render_pdf_page,
-                    document,
-                    page_index,
-                    target_width=reader_pdf_render_width,
-                )
-                if generation != reader_pdf_generation or document is not reader_pdf_document:
-                    return
-                reader_pdf_page_pngs[page_index] = png
+                render_width = reader_pdf_render_width
+                png = reader_pdf_page_pngs.get(page_index)
+                if png is None:
+                    png = await asyncio.to_thread(
+                        render_pdf_page,
+                        document,
+                        page_index,
+                        target_width=render_width,
+                    )
+                    if generation != reader_pdf_generation or document is not reader_pdf_document:
+                        return
+                    if (
+                        render_width != reader_pdf_render_width
+                        or host is not reader_pdf_page_hosts.get(page_index)
+                    ):
+                        return
+                    remember_pdf_png(page_index, png)
+                else:
+                    reader_pdf_page_pngs.move_to_end(page_index)
+                # A fast swipe may have moved far away while rasterization ran.
+                # Keep the bytes for back-scroll, but do not patch an obsolete host.
+                if abs(page_index - reader_pdf_requested_focus) > PDF_RENDER_RADIUS:
+                    continue
                 reader_pdf_rendered_pages.add(page_index)
                 host.content = _pdf_page_image(page_index, png)
                 try:
@@ -943,7 +971,6 @@ async def main(page: ft.Page) -> None:
         for page_index in tuple(reader_pdf_rendered_pages - keep):
             host = reader_pdf_page_hosts.get(page_index)
             reader_pdf_rendered_pages.discard(page_index)
-            reader_pdf_page_pngs.pop(page_index, None)
             if host is not None:
                 host.content = ft.Container(expand=True, bgcolor=SURFACE)
                 try:
@@ -979,6 +1006,9 @@ async def main(page: ft.Page) -> None:
                 focus = reader_pdf_requested_focus
                 await _render_pdf_neighborhood(generation, focus)
                 if focus == reader_pdf_requested_focus:
+                    # Rotation may replace hosts without changing page focus.
+                    if focus in reader_pdf_page_hosts and focus not in reader_pdf_rendered_pages:
+                        continue
                     break
         finally:
             if reader_pdf_render_worker is current:
@@ -2786,7 +2816,7 @@ async def main(page: ft.Page) -> None:
                         bgcolor=SURFACE,
                         border=ft.Border.all(1, DIVIDER),
                         alignment=ft.Alignment.CENTER,
-                        content=ft.ProgressRing(width=22, height=22, stroke_width=2),
+                        content=ft.Text("正在加载…", size=12, color=TEXT_SECONDARY),
                     )
                     reader_pdf_page_hosts[page_index] = host
                     reader_pdf_page_starts.append(cursor)

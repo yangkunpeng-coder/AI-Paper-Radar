@@ -80,6 +80,7 @@ class PhoneApp:
         self.reader_view = None
         self.reader_generation = 0
         self.reader_busy = False
+        self.pdf_display_index = None
         self.pdf_image = ft.Image(src=b"", fit=ft.BoxFit.CONTAIN, gapless_playback=True)
         self.pdf_label = ft.Text("正在连接……", size=14)
         self.pdf_body = ft.Container(expand=True)
@@ -878,10 +879,24 @@ class PhoneApp:
             await self.pdf.close()
             self.pdf_image.src = b""
             self.pdf_body.content = None
+            self.pdf_display_index = None
 
     async def retry_pdf(self, url):
         await self.close_pdf()
         await self.open_pdf(url)
+
+    def schedule_pdf_prefetch(self, direction=1):
+        self.pdf.queue_prefetch(direction)
+        if not self.closed and not self.pdf.prefetch_paused:
+            self.spawn("pdf-prefetch", self.pdf.prefetch_latest())
+
+    async def pdf_interaction_start(self, _event=None):
+        self.pdf.prefetch_paused = True
+
+    async def pdf_interaction_end(self, _event=None):
+        self.pdf.prefetch_paused = False
+        if self.page.route == "/reader":
+            self.schedule_pdf_prefetch()
 
     async def turn_pdf(self, delta):
         if self.reader_busy or self.pdf.document is None:
@@ -892,11 +907,19 @@ class PhoneApp:
             png = await self.pdf.render(self.pdf.index + delta)
             if png is not None and generation == self.reader_generation:
                 self.pdf_image.src = png
-                self.pdf_body.content = ft.InteractiveViewer(
-                    content=self.pdf_image, expand=True, min_scale=1, max_scale=4
-                )
+                if not isinstance(self.pdf_body.content, ft.InteractiveViewer):
+                    self.pdf_body.content = ft.InteractiveViewer(
+                        content=self.pdf_image,
+                        expand=True,
+                        min_scale=1,
+                        max_scale=4,
+                        on_interaction_start=self.pdf_interaction_start,
+                        on_interaction_end=self.pdf_interaction_end,
+                    )
+                self.pdf_display_index = self.pdf.index
                 self.pdf_label.value = f"{self.pdf.index + 1} / {len(self.pdf.document.pages)}"
                 self.page.update(self.pdf_body, self.pdf_label)
+                self.schedule_pdf_prefetch(delta or 1)
         except Exception:
             LOGGER.exception("Phone PDF rendering failed")
             if generation == self.reader_generation:

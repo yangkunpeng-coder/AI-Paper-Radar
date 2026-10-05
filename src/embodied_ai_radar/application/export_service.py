@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from io import BytesIO
+from tempfile import TemporaryDirectory
 
 from embodied_ai_radar.domain.library import PaperUserState
 from embodied_ai_radar.domain.llm import PaperAIAnalysis
@@ -69,10 +71,12 @@ def build_markdown_export(
         "| " + " | ".join(headers) + " |",
         "| " + " | ".join("---" for _ in headers) + " |",
     ]
+    buffer = BytesIO()
+    buffer.write(("\n".join(lines) + "\n").encode("utf-8"))
     for row in _export_rows(items):
-        lines.append("| " + " | ".join(_markdown_cell(value) for value in row) + " |")
-    lines.append("")
-    return "\n".join(lines).encode("utf-8")
+        line = "| " + " | ".join(_markdown_cell(value) for value in row) + " |\n"
+        buffer.write(line.encode("utf-8"))
+    return buffer.getvalue()
 
 
 def build_excel_export(
@@ -89,72 +93,83 @@ def build_excel_export(
 
     headers = export_headers()
     buffer = BytesIO()
-    workbook = xlsxwriter.Workbook(buffer, {"in_memory": True})
-    worksheet = workbook.add_worksheet("论文清单")
+    # External metadata must remain literal, including merged heading text.
+    # Only the explicit link columns below should create hyperlinks.
+    with (
+        TemporaryDirectory(prefix="paper-export-") as temporary_directory,
+        xlsxwriter.Workbook(
+            buffer,
+            {
+                "constant_memory": True,
+                "tmpdir": temporary_directory,
+                "strings_to_formulas": False,
+                "strings_to_urls": False,
+            },
+        ) as workbook,
+    ):
+        worksheet = workbook.add_worksheet("论文清单")
 
-    title_format = workbook.add_format(
-        {"bold": True, "font_size": 16, "valign": "vcenter"}
-    )
-    header_format = workbook.add_format(
-        {
-            "bold": True,
-            "text_wrap": True,
-            "valign": "vcenter",
-            "align": "center",
-            "border": 1,
-            "bg_color": "#EAF2F8",
-        }
-    )
-    cell_format = workbook.add_format({"text_wrap": True, "valign": "top", "border": 1})
-    center_format = workbook.add_format(
-        {"text_wrap": True, "valign": "top", "align": "center", "border": 1}
-    )
-    link_format = workbook.add_format(
-        {"font_color": "blue", "underline": True, "valign": "top", "border": 1}
-    )
+        title_format = workbook.add_format({"bold": True, "font_size": 16, "valign": "vcenter"})
+        header_format = workbook.add_format(
+            {
+                "bold": True,
+                "text_wrap": True,
+                "valign": "vcenter",
+                "align": "center",
+                "border": 1,
+                "bg_color": "#EAF2F8",
+            }
+        )
+        cell_format = workbook.add_format({"text_wrap": True, "valign": "top", "border": 1})
+        center_format = workbook.add_format(
+            {"text_wrap": True, "valign": "top", "align": "center", "border": 1}
+        )
+        link_format = workbook.add_format(
+            {"font_color": "blue", "underline": True, "valign": "top", "border": 1}
+        )
 
-    worksheet.merge_range(
-        0,
-        0,
-        0,
-        len(headers) - 1,
-        f"{context.domain_label}论文导出",
-        title_format,
-    )
-    header_row = 2
-    for column, header in enumerate(headers):
-        worksheet.write(header_row, column, header, header_format)
+        worksheet.set_row(0, 26)
+        worksheet.merge_range(
+            0,
+            0,
+            0,
+            len(headers) - 1,
+            f"{context.domain_label}论文导出",
+            title_format,
+        )
+        header_row = 2
+        worksheet.set_row(header_row, 34)
+        for column, header in enumerate(headers):
+            worksheet.write(header_row, column, header, header_format)
 
-    for row_offset, values in enumerate(_export_rows(items), start=1):
-        row_index = header_row + row_offset
-        for column, value in enumerate(values):
-            policy = EXPORT_COLUMNS[column]
-            if policy.link_label and value:
-                worksheet.write_url(
-                    row_index,
-                    column,
-                    str(value),
-                    link_format,
-                    string=policy.link_label,
-                )
-            elif column == 0:
-                worksheet.write(row_index, column, value, center_format)
-            else:
-                worksheet.write(row_index, column, value, cell_format)
+        for row_offset, values in enumerate(_export_rows(items), start=1):
+            row_index = header_row + row_offset
+            for column, value in enumerate(values):
+                policy = EXPORT_COLUMNS[column]
+                if policy.link_label and value:
+                    worksheet.write_url(
+                        row_index,
+                        column,
+                        str(value),
+                        link_format,
+                        string=policy.link_label,
+                    )
+                elif column == 0:
+                    worksheet.write(row_index, column, value, center_format)
+                else:
+                    worksheet.write_string(row_index, column, str(value), cell_format)
 
-    worksheet.freeze_panes(header_row + 1, 0)
-    worksheet.autofilter(header_row, 0, header_row + len(items), len(headers) - 1)
-    for column, policy in enumerate(EXPORT_COLUMNS):
-        worksheet.set_column(column, column, policy.width)
-    worksheet.set_row(0, 26)
-    worksheet.set_row(header_row, 34)
+        worksheet.freeze_panes(header_row + 1, 0)
+        worksheet.autofilter(header_row, 0, header_row + len(items), len(headers) - 1)
+        for column, policy in enumerate(EXPORT_COLUMNS):
+            worksheet.set_column(column, column, policy.width)
 
-    workbook.close()
     return buffer.getvalue()
 
 
-def _export_rows(items: list[LiteratureExportItem]) -> tuple[tuple[object, ...], ...]:
-    return tuple(_row_values(index, item) for index, item in enumerate(items, start=1))
+def _export_rows(items: list[LiteratureExportItem]) -> Iterator[tuple[object, ...]]:
+    for index, item in enumerate(items, start=1):
+        yield _row_values(index, item)
 
 
 def _row_values(index: int, item: LiteratureExportItem) -> tuple[object, ...]:
@@ -179,9 +194,7 @@ def _format_affiliations(ranked: RankedPaper) -> str:
     parts: list[str] = []
     for index, author in enumerate(paper.authors):
         affiliations = (
-            paper.author_affiliations[index]
-            if index < len(paper.author_affiliations)
-            else ()
+            paper.author_affiliations[index] if index < len(paper.author_affiliations) else ()
         )
         normalized = tuple(value.strip() for value in affiliations if value.strip())
         if normalized:

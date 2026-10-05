@@ -110,7 +110,7 @@ class SyncExecutionService:
             self.library.domain_paper_versions,
             domain_key=domain_key,
         )
-        scheduled_new_ids: set[str] = set()
+        scheduled_new_ids: set[str] = set(existing_by_id)
 
         await self._write(
             write_lock,
@@ -232,6 +232,7 @@ class SyncExecutionService:
                         domain_key=domain_key,
                         cancel_event=cancel_event,
                         progress_callback=live_progress,
+                        skip_existing_ids=scheduled_new_ids,
                     )
                 except Exception:
                     if partial_writes:
@@ -291,6 +292,7 @@ class SyncExecutionService:
                         stable_id = base_arxiv_id(item.paper.arxiv_id)
                         saved_candidate_ids.add(stable_id)
                         existing_by_id[stable_id] = item.paper.arxiv_id
+                        scheduled_new_ids.add(stable_id)
                 await self._write(
                     write_lock,
                     self.coordinator.checkpoint,

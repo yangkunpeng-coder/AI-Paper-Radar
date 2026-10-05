@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import closing, contextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -47,7 +48,7 @@ class SQLitePaperRepository:
         # journal_mode is persistent database state. Set WAL once during database
         # initialization instead of renegotiating it on every short read/query
         # connection, which adds avoidable work while sync and UI reads overlap.
-        with sqlite3.connect(self.path) as conn:
+        with closing(sqlite3.connect(self.path)) as conn:
             conn.execute("PRAGMA journal_mode = WAL")
         with self._connect() as conn:
             conn.executescript(
@@ -718,6 +719,41 @@ class SQLitePaperRepository:
             sort_mode=sort_mode,
         )
 
+    def load_all_since(
+        self,
+        updated_after: datetime,
+        *,
+        batch_size: int = 500,
+        domain_key: str | None = None,
+        topic_key: str | None = None,
+        favorites_only: bool = False,
+        sort_mode: str = "interest",
+    ) -> list[LibraryPaper]:
+        """Fetch one query in batches from a snapshot, released before file generation."""
+        if batch_size < 1:
+            raise ValueError("batch_size must be > 0")
+        entries: list[LibraryPaper] = []
+        with self._connect() as conn:
+            conn.execute("PRAGMA query_only = ON")
+            # A deferred read transaction pins the snapshot on the first SELECT.
+            # WAL writers may continue committing while subsequent batches are read.
+            conn.execute("BEGIN")
+            cursor = self._select_library(
+                conn,
+                updated_after=updated_after,
+                limit=-1,
+                domain_key=domain_key,
+                topic_key=topic_key,
+                favorites_only=favorites_only,
+                sort_mode=sort_mode,
+            )
+            try:
+                while rows := cursor.fetchmany(batch_size):
+                    entries.extend(self._row_to_library_paper(row) for row in rows)
+            finally:
+                cursor.close()
+        return entries
+
     def count_since(
         self,
         updated_after: datetime,
@@ -1035,6 +1071,29 @@ class SQLitePaperRepository:
     def set_read(self, arxiv_id: str, value: bool) -> PaperUserState:
         return self._set_state(arxiv_id, "is_read", value)
 
+    def save_analyses_with_topics(
+        self,
+        *,
+        model: str,
+        domain_key: str = DOMAIN_EMBODIED,
+        analyses: Mapping[str, PaperAIAnalysis],
+        classification_source: str = "deepseek-domain-v1",
+    ) -> None:
+        """Commit a completed batch and its topic assignments atomically."""
+        if not analyses:
+            return
+        with self._connect() as conn:
+            # Acquire the write transaction before checking paper versions so a
+            # concurrent sync cannot replace them between validation and writes.
+            conn.execute("BEGIN IMMEDIATE")
+            self._save_analyses(conn, model=model, domain_key=domain_key, analyses=analyses)
+            self._replace_analysis_topics(
+                conn,
+                domain_key=domain_key,
+                topic_keys_by_arxiv_id={key: value.topic_keys for key, value in analyses.items()},
+                classification_source=classification_source,
+            )
+
     def save_analyses(
         self,
         *,
@@ -1044,98 +1103,110 @@ class SQLitePaperRepository:
     ) -> None:
         if not analyses:
             return
+        with self._connect() as conn:
+            self._save_analyses(conn, model=model, domain_key=domain_key, analyses=analyses)
+
+    def _save_analyses(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        model: str,
+        domain_key: str,
+        analyses: Mapping[str, PaperAIAnalysis],
+    ) -> None:
+        if not analyses:
+            return
         domain = _require_domain(domain_key)
         now = _now_iso()
-        with self._connect() as conn:
-            for version_id, analysis in analyses.items():
-                if analysis.domain_key != domain.key:
-                    raise ValueError(
-                        f"Analysis domain {analysis.domain_key} does not match {domain.key}"
-                    )
-                stable_id = base_arxiv_id(version_id)
-                paper_row = conn.execute(
-                    """
-                    SELECT p.latest_version_id
-                    FROM papers AS p
-                    JOIN paper_domains AS pd
-                      ON pd.arxiv_id = p.arxiv_id AND pd.domain_key = ?
-                    WHERE p.arxiv_id = ?
-                    """,
-                    (domain.key, stable_id),
-                ).fetchone()
-                if paper_row is None or paper_row["latest_version_id"] != version_id:
-                    continue
+        for version_id, analysis in analyses.items():
+            if analysis.domain_key != domain.key:
+                raise ValueError(
+                    f"Analysis domain {analysis.domain_key} does not match {domain.key}"
+                )
+            stable_id = base_arxiv_id(version_id)
+            paper_row = conn.execute(
+                """
+                SELECT p.latest_version_id
+                FROM papers AS p
+                JOIN paper_domains AS pd
+                  ON pd.arxiv_id = p.arxiv_id AND pd.domain_key = ?
+                WHERE p.arxiv_id = ?
+                """,
+                (domain.key, stable_id),
+            ).fetchone()
+            if paper_row is None or paper_row["latest_version_id"] != version_id:
+                continue
+            conn.execute(
+                """
+                INSERT INTO domain_ai_analyses (
+                    arxiv_id, domain_key, analyzed_version_id, model, relevance_score,
+                    summary_cn, problem_cn, method_cn, contribution_cn, results_cn,
+                    recommendation_cn, tags_json, topic_keys_json, analysis_version, analyzed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(arxiv_id, domain_key) DO UPDATE SET
+                    analyzed_version_id = excluded.analyzed_version_id,
+                    model = excluded.model,
+                    relevance_score = excluded.relevance_score,
+                    summary_cn = excluded.summary_cn,
+                    problem_cn = excluded.problem_cn,
+                    method_cn = excluded.method_cn,
+                    contribution_cn = excluded.contribution_cn,
+                    results_cn = excluded.results_cn,
+                    recommendation_cn = excluded.recommendation_cn,
+                    tags_json = excluded.tags_json,
+                    topic_keys_json = excluded.topic_keys_json,
+                    analysis_version = excluded.analysis_version,
+                    analyzed_at = excluded.analyzed_at
+                """,
+                (
+                    stable_id,
+                    domain.key,
+                    version_id,
+                    model,
+                    analysis.relevance_score,
+                    analysis.summary_cn,
+                    analysis.problem_cn,
+                    analysis.method_cn,
+                    analysis.contribution_cn,
+                    analysis.results_cn,
+                    analysis.recommendation_cn,
+                    _json_list(analysis.tags),
+                    _json_list(analysis.topic_keys),
+                    analysis.analysis_version,
+                    now,
+                ),
+            )
+            if domain.key == DOMAIN_EMBODIED:
+                # Keep the v7 cache mirrored for safe adjacent-version rollback.
                 conn.execute(
                     """
-                    INSERT INTO domain_ai_analyses (
-                        arxiv_id, domain_key, analyzed_version_id, model, relevance_score,
-                        summary_cn, problem_cn, method_cn, contribution_cn, results_cn,
-                        recommendation_cn, tags_json, topic_keys_json, analysis_version, analyzed_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(arxiv_id, domain_key) DO UPDATE SET
+                    INSERT INTO ai_analyses (
+                        arxiv_id, analyzed_version_id, model, relevance_score,
+                        summary_cn, contribution_cn, recommendation_cn, tags_json,
+                        analyzed_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(arxiv_id) DO UPDATE SET
                         analyzed_version_id = excluded.analyzed_version_id,
                         model = excluded.model,
                         relevance_score = excluded.relevance_score,
                         summary_cn = excluded.summary_cn,
-                        problem_cn = excluded.problem_cn,
-                        method_cn = excluded.method_cn,
                         contribution_cn = excluded.contribution_cn,
-                        results_cn = excluded.results_cn,
                         recommendation_cn = excluded.recommendation_cn,
                         tags_json = excluded.tags_json,
-                        topic_keys_json = excluded.topic_keys_json,
-                        analysis_version = excluded.analysis_version,
                         analyzed_at = excluded.analyzed_at
                     """,
                     (
                         stable_id,
-                        domain.key,
                         version_id,
                         model,
                         analysis.relevance_score,
                         analysis.summary_cn,
-                        analysis.problem_cn,
-                        analysis.method_cn,
                         analysis.contribution_cn,
-                        analysis.results_cn,
                         analysis.recommendation_cn,
                         _json_list(analysis.tags),
-                        _json_list(analysis.topic_keys),
-                        analysis.analysis_version,
                         now,
                     ),
                 )
-                if domain.key == DOMAIN_EMBODIED:
-                    # Keep the v7 cache mirrored for safe adjacent-version rollback.
-                    conn.execute(
-                        """
-                        INSERT INTO ai_analyses (
-                            arxiv_id, analyzed_version_id, model, relevance_score,
-                            summary_cn, contribution_cn, recommendation_cn, tags_json,
-                            analyzed_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT(arxiv_id) DO UPDATE SET
-                            analyzed_version_id = excluded.analyzed_version_id,
-                            model = excluded.model,
-                            relevance_score = excluded.relevance_score,
-                            summary_cn = excluded.summary_cn,
-                            contribution_cn = excluded.contribution_cn,
-                            recommendation_cn = excluded.recommendation_cn,
-                            tags_json = excluded.tags_json,
-                            analyzed_at = excluded.analyzed_at
-                        """,
-                        (
-                            stable_id,
-                            version_id,
-                            model,
-                            analysis.relevance_score,
-                            analysis.summary_cn,
-                            analysis.contribution_cn,
-                            analysis.recommendation_cn,
-                            _json_list(analysis.tags),
-                            now,
-                        ),
-                    )
 
     def load_analyses(
         self,
@@ -1194,45 +1265,62 @@ class SQLitePaperRepository:
     ) -> None:
         if not topic_keys_by_arxiv_id:
             return
+        with self._connect() as conn:
+            self._replace_analysis_topics(
+                conn,
+                domain_key=domain_key,
+                topic_keys_by_arxiv_id=topic_keys_by_arxiv_id,
+                classification_source=classification_source,
+            )
+
+    def _replace_analysis_topics(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        domain_key: str,
+        topic_keys_by_arxiv_id: Mapping[str, Sequence[str]],
+        classification_source: str,
+    ) -> None:
+        if not topic_keys_by_arxiv_id:
+            return
         domain = _require_domain(domain_key)
         source = classification_source.strip() or "deepseek-domain-v1"
         if not source.startswith("deepseek"):
             raise ValueError("DeepSeek topic classification source must start with 'deepseek'")
         now = _now_iso()
-        with self._connect() as conn:
-            for arxiv_id, raw_topic_keys in topic_keys_by_arxiv_id.items():
-                stable_id = base_arxiv_id(arxiv_id)
-                latest = conn.execute(
-                    """
-                    SELECT p.latest_version_id
-                    FROM papers AS p
-                    JOIN paper_domains AS pd
-                      ON pd.arxiv_id = p.arxiv_id AND pd.domain_key = ?
-                    WHERE p.arxiv_id = ?
-                    """,
-                    (domain.key, stable_id),
-                ).fetchone()
-                if latest is None or latest["latest_version_id"] != arxiv_id:
-                    continue
-                topic_keys = _validate_topic_keys(domain, raw_topic_keys)
+        for arxiv_id, raw_topic_keys in topic_keys_by_arxiv_id.items():
+            stable_id = base_arxiv_id(arxiv_id)
+            latest = conn.execute(
+                """
+                SELECT p.latest_version_id
+                FROM papers AS p
+                JOIN paper_domains AS pd
+                  ON pd.arxiv_id = p.arxiv_id AND pd.domain_key = ?
+                WHERE p.arxiv_id = ?
+                """,
+                (domain.key, stable_id),
+            ).fetchone()
+            if latest is None or latest["latest_version_id"] != arxiv_id:
+                continue
+            topic_keys = _validate_topic_keys(domain, raw_topic_keys)
+            conn.execute(
+                """
+                DELETE FROM paper_topics
+                WHERE arxiv_id = ? AND domain_key = ?
+                  AND classification_source LIKE 'deepseek%'
+                """,
+                (stable_id, domain.key),
+            )
+            for topic_key in topic_keys:
                 conn.execute(
                     """
-                    DELETE FROM paper_topics
-                    WHERE arxiv_id = ? AND domain_key = ?
-                      AND classification_source LIKE 'deepseek%'
+                    INSERT INTO paper_topics(
+                        arxiv_id, domain_key, topic_key, classification_source, assigned_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(arxiv_id, domain_key, topic_key) DO NOTHING
                     """,
-                    (stable_id, domain.key),
+                    (stable_id, domain.key, topic_key, source, now),
                 )
-                for topic_key in topic_keys:
-                    conn.execute(
-                        """
-                        INSERT INTO paper_topics(
-                            arxiv_id, domain_key, topic_key, classification_source, assigned_at
-                        ) VALUES (?, ?, ?, ?, ?)
-                        ON CONFLICT(arxiv_id, domain_key, topic_key) DO NOTHING
-                        """,
-                        (stable_id, domain.key, topic_key, source, now),
-                    )
 
     def _load_library(
         self,
@@ -1247,6 +1335,36 @@ class SQLitePaperRepository:
     ) -> list[LibraryPaper]:
         if limit < 1:
             return []
+        with self._connect() as conn:
+            cursor = self._select_library(
+                conn,
+                updated_after=updated_after,
+                limit=limit,
+                offset=offset,
+                domain_key=domain_key,
+                topic_key=topic_key,
+                favorites_only=favorites_only,
+                sort_mode=sort_mode,
+            )
+            try:
+                rows = cursor.fetchall()
+            finally:
+                cursor.close()
+        return [self._row_to_library_paper(row) for row in rows]
+
+    def _select_library(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        updated_after: datetime | None = None,
+        limit: int,
+        offset: int = 0,
+        domain_key: str | None = None,
+        topic_key: str | None = None,
+        favorites_only: bool = False,
+        sort_mode: str = "interest",
+    ) -> sqlite3.Cursor:
+        """Share validated filters/order; the caller owns and closes the cursor."""
         if offset < 0:
             raise ValueError("offset must be >= 0")
         if sort_mode not in {"interest", "relevance", "latest"}:
@@ -1344,30 +1462,28 @@ class SQLitePaperRepository:
 
         where_clause = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
         params.extend((limit, offset))
-        with self._connect() as conn:
-            rows = conn.execute(
-                f"""
-                SELECT p.*, s.is_favorite, s.is_read,
-                       {metric_projection}
-                       a.domain_key AS ai_domain_key, a.analyzed_version_id,
-                       a.relevance_score AS ai_relevance_score, a.summary_cn,
-                       a.problem_cn, a.method_cn, a.contribution_cn, a.results_cn,
-                       a.recommendation_cn, a.analysis_version,
-                       a.tags_json AS ai_tags_json, a.topic_keys_json AS ai_topic_keys_json
-                FROM papers AS p
-                JOIN paper_state AS s ON s.arxiv_id = p.arxiv_id
-                {domain_join}
-                LEFT JOIN domain_ai_analyses AS a
-                  ON a.arxiv_id = p.arxiv_id
-                 AND a.domain_key = ?
-                 AND a.analyzed_version_id = p.latest_version_id
-                {where_clause}
-                ORDER BY {order_clause}
-                LIMIT ? OFFSET ?
-                """,
-                tuple(params),
-            ).fetchall()
-        return [self._row_to_library_paper(row) for row in rows]
+        return conn.execute(
+            f"""
+            SELECT p.*, s.is_favorite, s.is_read,
+                   {metric_projection}
+                   a.domain_key AS ai_domain_key, a.analyzed_version_id,
+                   a.relevance_score AS ai_relevance_score, a.summary_cn,
+                   a.problem_cn, a.method_cn, a.contribution_cn, a.results_cn,
+                   a.recommendation_cn, a.analysis_version,
+                   a.tags_json AS ai_tags_json, a.topic_keys_json AS ai_topic_keys_json
+            FROM papers AS p
+            JOIN paper_state AS s ON s.arxiv_id = p.arxiv_id
+            {domain_join}
+            LEFT JOIN domain_ai_analyses AS a
+              ON a.arxiv_id = p.arxiv_id
+             AND a.domain_key = ?
+             AND a.analyzed_version_id = p.latest_version_id
+            {where_clause}
+            ORDER BY {order_clause}
+            LIMIT ? OFFSET ?
+            """,
+            tuple(params),
+        )
 
     def _set_state(self, arxiv_id: str, column: str, value: bool) -> PaperUserState:
         if column not in {"is_favorite", "is_read"}:
@@ -1457,7 +1573,7 @@ class SQLitePaperRepository:
 
         if not self.path.exists() or self.path.stat().st_size == 0:
             return None
-        with sqlite3.connect(self.path) as conn:
+        with closing(sqlite3.connect(self.path)) as conn:
             has_meta = conn.execute(
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'app_meta'"
             ).fetchone()
@@ -1482,7 +1598,10 @@ class SQLitePaperRepository:
         backup_path = backup_dir / (
             f"{self.path.stem}.schema{from_version}-to-{SCHEMA_VERSION}.{timestamp}.db"
         )
-        with sqlite3.connect(self.path) as source, sqlite3.connect(backup_path) as target:
+        with (
+            closing(sqlite3.connect(self.path)) as source,
+            closing(sqlite3.connect(backup_path)) as target,
+        ):
             source.backup(target)
 
         pattern = f"{self.path.stem}.schema*-to-*.db"
@@ -1491,15 +1610,16 @@ class SQLitePaperRepository:
             stale.unlink(missing_ok=True)
         return backup_path
 
-    def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys = ON")
-        # WAL is configured once in initialize(). Concurrent domain sync jobs may
-        # still reach short write checkpoints at the same time; busy_timeout lets
-        # briefly for another writer instead of surfacing transient lock errors.
-        conn.execute("PRAGMA busy_timeout = 10000")
-        return conn
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        # sqlite3's transaction context does not close the connection. Closing
+        # outside it guarantees commit/rollback happens before releasing handles.
+        with closing(sqlite3.connect(self.path)) as conn:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA busy_timeout = 10000")
+            with conn:
+                yield conn
 
 
 

@@ -3,28 +3,22 @@
 from __future__ import annotations
 
 from datetime import timezone
-from typing import Callable
 
 import flet as ft
 
-from embodied_ai_radar.domain.library import LibraryPaper, PaperUserState
-from embodied_ai_radar.domain.llm import PaperAIAnalysis
+from embodied_ai_radar.domain.library import LibraryPaper
 from embodied_ai_radar.domain.models import RankedPaper
 from embodied_ai_radar.domain.research_domains import get_research_domain
 from embodied_ai_radar.ui.text_format import format_paper_title
 from embodied_ai_radar.ui.theme import (
     APP_BG,
-    CARD_RADIUS,
     DANGER,
     DIVIDER,
-    FONT_BODY,
-    FONT_CAPTION,
     PRIMARY,
     PRIMARY_BORDER,
     PRIMARY_DARK,
     PRIMARY_SOFT,
     SURFACE,
-    SURFACE_HOVER,
     SURFACE_SUBTLE,
     TEXT_PRIMARY,
     TEXT_SECONDARY,

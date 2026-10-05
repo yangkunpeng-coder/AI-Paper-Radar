@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -10,12 +11,7 @@ import flet_secure_storage as fss
 
 from embodied_ai_radar.application.analysis_service import AnalysisService
 from embodied_ai_radar.application.browse_controller import BrowseController, BrowseQuery
-from embodied_ai_radar.application.export_service import (
-    ExportContext,
-    LiteratureExportItem,
-    build_excel_export,
-    build_markdown_export,
-)
+from embodied_ai_radar.application.export_service import ExportContext
 from embodied_ai_radar.application.library_service import LibraryService
 from embodied_ai_radar.application.radar_service import RadarResult, RadarService
 from embodied_ai_radar.application.settings_service import (
@@ -30,14 +26,11 @@ from embodied_ai_radar.application.sync_service import (
 from embodied_ai_radar.application.task_registry import TaskRegistry
 from embodied_ai_radar.domain.library import (
     ArxivHarvestProgress,
-    LibraryPaper,
-    LibraryViewCounts,
     PaperUserState,
 )
 from embodied_ai_radar.domain.llm import LLMSettings, PaperAIAnalysis, SUPPORTED_DEEPSEEK_MODELS
 from embodied_ai_radar.domain.models import RankedPaper
 from embodied_ai_radar.domain.research_domains import (
-    DOMAIN_EMBODIED,
     RESEARCH_DOMAINS,
     TOPIC_ALL,
     get_research_domain,
@@ -51,6 +44,8 @@ from embodied_ai_radar.infrastructure.flet_settings_store import (
     FletSecureSecretStore,
 )
 from embodied_ai_radar.infrastructure.sqlite_library import SQLitePaperRepository
+from embodied_ai_radar.ui.control_updates import ControlUpdateBatcher
+from embodied_ai_radar.ui.desktop.export import ExportRequest, run_export
 from embodied_ai_radar.ui.text_format import format_paper_title
 from embodied_ai_radar.ui.paper_view import (
     DomainBrowseState,
@@ -81,13 +76,10 @@ from embodied_ai_radar.ui.theme import (
     CONTROL_RADIUS,
     DANGER,
     DANGER_SOFT,
-    DISABLED_BG,
-    DISABLED_TEXT,
     DIVIDER,
     DIVIDER_STRONG,
     FONT_BODY,
     FONT_CAPTION,
-    FONT_CARD_TITLE,
     FONT_CONTROL,
     FONT_DETAIL_TITLE,
     FONT_META,
@@ -98,15 +90,10 @@ from embodied_ai_radar.ui.theme import (
     PRIMARY_BORDER,
     PRIMARY_DARK,
     PRIMARY_SOFT,
-    PURPLE,
-    PURPLE_SOFT,
     SIDEBAR_BG,
     SIDEBAR_WIDTH,
     SURFACE,
-    SURFACE_HOVER,
     SURFACE_SUBTLE,
-    TEAL,
-    TEAL_SOFT,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     TEXT_TERTIARY,
@@ -538,6 +525,7 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
     sync_jobs = SyncJobRegistry()
     sync_tasks: dict[str, asyncio.Task[bool]] = {}
     task_registry = TaskRegistry()
+    task_ui_updates = ControlUpdateBatcher(page, task_registry)
     sync_write_lock = asyncio.Lock()
 
     sync_job_details: dict[str, ft.Text] = {}
@@ -939,7 +927,9 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
         progress_control.value = progress
         progress_text_control.value = progress_text
         update_task_center()
-        page.update()
+        task_ui_updates.request(
+            task_center_panel, range_segment, refresh_button, immediate=True
+        )
 
     def update_busy(
         task_id: str,
@@ -967,7 +957,9 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
         if progress_text is not None:
             progress_text_control.value = progress_text
         update_task_center()
-        page.update()
+        task_ui_updates.request(
+            task_center_panel, range_segment, refresh_button, immediate=False
+        )
 
     def hide_busy(task_id: str) -> None:
         controls = activity_task_controls.pop(task_id, None)
@@ -977,7 +969,9 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
         if card in activity_tasks_column.controls:
             activity_tasks_column.controls.remove(card)
         update_task_center()
-        page.update()
+        task_ui_updates.request(
+            task_center_panel, range_segment, refresh_button, immediate=True
+        )
 
 
     def show_status(
@@ -1339,6 +1333,18 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
             )
 
     paper_card_controls: dict[str, ft.Container] = {}
+    paper_card_values: dict[str, tuple] = {}
+    paper_card_indexes: dict[str, int] = {}
+    favorite_updates: set[str] = set()
+
+    def active_browse_query() -> BrowseQuery:
+        return make_browse_query(
+            domain_key=active_domain,
+            days=selected_days,
+            topic_key=selected_topic_key,
+            favorites_only=bool(favorites_only_checkbox.value),
+            sort=sort_mode,
+        )
 
     def _set_paper_card_selected(card: ft.Container, selected: bool) -> None:
         card.bgcolor = SURFACE_SUBTLE if selected else SURFACE
@@ -1353,29 +1359,87 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
             previous = selected_arxiv_id
             selected_arxiv_id = arxiv_id
             remember_active_browse_state()
+            updates = []
             if previous and previous in paper_card_controls:
-                _set_paper_card_selected(paper_card_controls[previous], False)
+                card = paper_card_controls[previous]
+                _set_paper_card_selected(card, False)
+                updates.append(card)
             if arxiv_id in paper_card_controls:
-                _set_paper_card_selected(paper_card_controls[arxiv_id], True)
+                card = paper_card_controls[arxiv_id]
+                _set_paper_card_selected(card, True)
+                if all(control is not card for control in updates):
+                    updates.append(card)
             render_inspector()
-            page.update()
+            if not inspector_collapsed:
+                updates.append(inspector_body)
+            if updates:
+                page.update(*updates)
 
         return handler
 
     async def toggle_favorite(arxiv_id: str) -> None:
-        current = paper_states.get(arxiv_id, PaperUserState(arxiv_id=arxiv_id))
-        await asyncio.to_thread(
-            library_service.set_favorite,
-            arxiv_id,
-            not current.is_favorite,
-        )
-        # Favorite state participates in both the metric counts and the optional
-        # "收藏" scope. Reload only the currently materialized rows rather than
-        # rebuilding the whole domain in memory.
-        await reload_library_view(preserve_loaded=True)
-        render_papers()
-        render_inspector()
-        page.update()
+        nonlocal current_result, current_view_counts
+        if arxiv_id in favorite_updates:
+            return
+        favorite_updates.add(arxiv_id)
+        try:
+            current = paper_states.get(arxiv_id, PaperUserState(arxiv_id=arxiv_id))
+            saved = await asyncio.to_thread(
+                library_service.set_favorite, arxiv_id, not current.is_favorite,
+            )
+            # Capture the CURRENT query after the write: the user may have
+            # switched domains while persistence was in flight.
+            query = active_browse_query()
+            if requested_domain != active_domain:
+                return
+            index = paper_card_indexes.get(arxiv_id)
+            if index is not None and index < len(current_result.papers):
+                item = current_result.papers[index]
+                if item.paper.arxiv_id == arxiv_id:
+                    paper_states[arxiv_id] = saved
+                    if query.favorites_only and not saved.is_favorite:
+                        current_result = replace(
+                            current_result,
+                            papers=tuple(
+                                paper for paper in current_result.papers
+                                if paper.paper.arxiv_id != arxiv_id
+                            ),
+                        )
+                        paper_states.pop(arxiv_id, None)
+                        analyses.pop(arxiv_id, None)
+                        render_papers()
+                    else:
+                        paper_list.controls[index] = make_paper_card(item)
+            render_inspector()
+            remember_active_browse_state()
+            updates = [paper_list]
+            if not inspector_collapsed:
+                updates.append(inspector_body)
+            page.update(*updates)
+
+            # The persisted favorite is visible before the slower count query.
+            try:
+                counts = await asyncio.to_thread(browse_controller.counts, query)
+            except Exception:
+                show_status("收藏已保存，数量刷新失败，请稍后重试。", failed=True)
+                return
+            if query != active_browse_query() or requested_domain != active_domain:
+                return
+            current_view_counts = counts
+            if query.favorites_only and not current_result.papers and counts.filtered:
+                # Removing the last loaded favorite must still expose the next page.
+                if not await reload_library_view(preserve_loaded=False):
+                    return
+                render_papers()
+                render_inspector()
+                refill_updates = [paper_list]
+                if not inspector_collapsed:
+                    refill_updates.append(inspector_body)
+                page.update(*refill_updates)
+            update_library_counts_ui()
+            page.update(stats_row)
+        finally:
+            favorite_updates.discard(arxiv_id)
 
     def favorite_handler(arxiv_id: str):
         async def handler(_event) -> None:
@@ -1398,6 +1462,12 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
         ]
 
     def make_paper_card(item: RankedPaper) -> ft.Container:
+        arxiv_id = item.paper.arxiv_id
+        values = (item, state_for(item), analyses.get(arxiv_id))
+        cached = paper_card_controls.get(arxiv_id)
+        if cached is not None and paper_card_values.get(arxiv_id) == values:
+            _set_paper_card_selected(cached, arxiv_id == selected_arxiv_id)
+            return cached
         card = _paper_card(
             item,
             state=state_for(item),
@@ -1407,18 +1477,24 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
             selected=item.paper.arxiv_id == selected_arxiv_id,
         )
         assert isinstance(card, ft.Container)
-        paper_card_controls[item.paper.arxiv_id] = card
+        paper_card_controls[arxiv_id] = card
+        paper_card_values[arxiv_id] = values
         return card
 
     def append_paper_cards(items: list[RankedPaper]) -> None:
-        paper_list.controls.extend(make_paper_card(item) for item in items)
+        for item in items:
+            paper_card_indexes[item.paper.arxiv_id] = len(paper_list.controls)
+            paper_list.controls.append(make_paper_card(item))
 
     def render_papers() -> None:
         nonlocal selected_arxiv_id
         paper_list.controls.clear()
-        paper_card_controls.clear()
+        paper_card_indexes.clear()
         visible_items = visible_papers()
         visible_ids = {item.paper.arxiv_id for item in visible_items}
+        for stale_id in paper_card_controls.keys() - visible_ids:
+            paper_card_controls.pop(stale_id, None)
+            paper_card_values.pop(stale_id, None)
         if visible_items and selected_arxiv_id not in visible_ids:
             selected_arxiv_id = visible_items[0].paper.arxiv_id
         elif not visible_items:
@@ -1736,7 +1812,9 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
         nonlocal task_center_expanded
         task_center_expanded = not task_center_expanded
         update_task_center()
-        page.update()
+        task_ui_updates.request(
+            task_center_panel, range_segment, refresh_button, immediate=True
+        )
 
     task_center_expand_button.on_click = toggle_task_center
 
@@ -1747,13 +1825,18 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
         progress: float | None,
         progress_text: str,
     ) -> None:
+        cancel_event = sync_jobs.cancel_event(domain_key)
+        if cancel_event is None or cancel_event.is_set():
+            return
         sync_job_details[domain_key].value = detail
         sync_job_progress[domain_key].value = progress
         sync_job_progress_texts[domain_key].value = progress_text
         sync_job_cancel_buttons[domain_key].disabled = False
         sync_job_cancel_buttons[domain_key].content = "停止"
         update_sync_jobs_panel()
-        page.update()
+        task_ui_updates.request(
+            task_center_panel, range_segment, refresh_button, immediate=False
+        )
 
     def request_sync_cancel(domain_key: str) -> None:
         if not sync_jobs.cancel(domain_key):
@@ -1767,7 +1850,9 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
                 "未完成日期不会标记为已覆盖。"
             )
         update_sync_jobs_panel()
-        page.update()
+        task_ui_updates.request(
+            task_center_panel, range_segment, refresh_button, immediate=True
+        )
 
     async def perform_sync(
         *,
@@ -2062,6 +2147,9 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
             sync_job_cancel_buttons[sync_domain].disabled = False
             sync_job_cancel_buttons[sync_domain].content = "停止"
             update_sync_jobs_panel()
+            task_ui_updates.request(
+                task_center_panel, range_segment, refresh_button, immediate=True
+            )
             if sync_domain == active_domain:
                 try:
                     sync_state = await asyncio.to_thread(
@@ -2069,7 +2157,6 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
                     )
                 except Exception:
                     pass
-            page.update()
 
     def start_sync_job(
         *,
@@ -2103,7 +2190,9 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
             name=f"sync:{domain_key}",
         )
         sync_tasks[domain_key] = task
-        page.update()
+        task_ui_updates.request(
+            task_center_panel, range_segment, refresh_button, immediate=True
+        )
         return True
 
     async def sync_arxiv(_event=None) -> None:
@@ -2212,115 +2301,45 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
 
         return handler
 
-    async def load_all_filtered_entries() -> list[LibraryPaper]:
-        """Load the complete current filtered set for explicit bulk actions only.
-
-        Normal browsing stays on 24-row SQL pages. Bulk actions iterate bounded
-        database pages so "all current results" never silently truncates at 5000.
-        """
-
-        target_domain = active_domain
-        target_days = selected_days
-        target_topic = selected_topic_key
-        target_favorites = bool(favorites_only_checkbox.value)
-        target_sort = sort_mode
-        query = make_browse_query(
-            domain_key=target_domain,
-            days=target_days,
-            topic_key=target_topic,
-            favorites_only=target_favorites,
-            sort=target_sort,
-        )
-        return await asyncio.to_thread(
-            browse_controller.load_all,
-            query,
-            batch_size=500,
-        )
-
-    async def export_items() -> list[LiteratureExportItem]:
-        entries = await load_all_filtered_entries()
-        return [
-            LiteratureExportItem(
-                ranked=entry.ranked,
-                state=entry.state,
-                analysis=entry.analysis,
-            )
-            for entry in entries
-        ]
-
     async def export_literature(file_format: str) -> None:
-        items = await export_items()
-        if not items:
-            show_status("当前筛选结果为空，没有可导出的论文。")
-            return
-
-        export_domain = get_research_domain(active_domain)
-        export_topic = export_domain.topic(selected_topic_key)
+        # Capture query and metadata before the first await; browsing remains free
+        # to change while the worker reads and builds this export.
+        export_days = selected_days
+        query = make_browse_query(
+            domain_key=active_domain,
+            days=export_days,
+            topic_key=selected_topic_key,
+            favorites_only=bool(favorites_only_checkbox.value),
+            sort=sort_mode,
+        )
+        export_domain = get_research_domain(query.domain_key)
+        export_topic = export_domain.topic(query.topic_key)
         export_context = ExportContext(
-            range_label=range_label(selected_days),
+            range_label=range_label(export_days),
             exported_at=datetime.now(UTC),
             domain_key=export_domain.key,
             domain_label=export_domain.label,
-            scope_label="收藏" if favorites_only_checkbox.value else "全部论文",
+            scope_label="收藏" if query.favorites_only else "全部论文",
             topic_label=export_topic.label if export_topic is not None else "全部方向",
-            sort_label=SORT_LABELS.get(sort_mode, SORT_LABELS[SORT_INTEREST]),
+            sort_label=SORT_LABELS.get(query.sort_mode, SORT_LABELS[SORT_INTEREST]),
         )
-        date_stamp = datetime.now(UTC).strftime("%Y%m%d")
         range_stamp = {
             7: "7d",
             30: "1m",
             90: "3m",
             180: "6m",
             365: "1y",
-        }[selected_days]
-        export_task_id = f"export:{file_format}"
-        try:
-            format_label = "Excel" if file_format == "xlsx" else "Markdown"
-            show_busy(
-                export_task_id,
-                f"正在生成 {format_label}",
-                f"正在整理当前筛选的 {len(items)} 篇论文……",
-            )
-            if file_format == "xlsx":
-                payload = await asyncio.to_thread(
-                    build_excel_export,
-                    items,
-                    context=export_context,
-                )
-                file_name = f"{export_domain.key}_papers_{range_stamp}_{date_stamp}.xlsx"
-                allowed_extensions = ["xlsx"]
-            elif file_format == "md":
-                payload = await asyncio.to_thread(
-                    build_markdown_export,
-                    items,
-                    context=export_context,
-                )
-                file_name = f"{export_domain.key}_papers_{range_stamp}_{date_stamp}.md"
-                allowed_extensions = ["md"]
-            else:
-                raise ValueError(f"Unsupported export format: {file_format}")
-
-            hide_busy(export_task_id)
-            file_path = await ft.FilePicker().save_file(
-                dialog_title=f"导出{export_domain.label}论文",
-                file_name=file_name,
-                file_type=ft.FilePickerFileType.CUSTOM,
-                allowed_extensions=allowed_extensions,
-                src_bytes=payload,
-            )
-            if page.web:
-                show_status(f"已导出 {len(items)} 篇论文：{file_name}")
-                notify_task(f"{format_label} 导出完成", f"已导出 {len(items)} 篇论文")
-            elif file_path:
-                show_status(f"已导出 {len(items)} 篇论文：{file_path}")
-                notify_task(f"{format_label} 导出完成", f"已导出 {len(items)} 篇论文")
-            else:
-                show_status("已取消导出。")
-        except Exception as exc:
-            hide_busy(export_task_id)
-            show_status(f"导出失败：{type(exc).__name__}: {exc}", failed=True)
-            notify_task("导出失败", f"{type(exc).__name__}: {exc}", failed=True)
-        page.update()
+        }[export_days]
+        await run_export(
+            file_format,
+            ExportRequest(query, export_context, range_stamp),
+            browse_controller=browse_controller,
+            page=page,
+            show_busy=show_busy,
+            hide_busy=hide_busy,
+            show_status=show_status,
+            notify_task=notify_task,
+        )
 
     async def export_excel(_event=None) -> None:
         await export_literature("xlsx")
@@ -3263,6 +3282,7 @@ async def mount(page: ft.Page, *, configure_desktop_window: bool) -> None:
                     )
             except Exception:
                 pass
+        task_ui_updates.close()
         await task_registry.cancel_all()
 
     page.on_close = shutdown_page_tasks

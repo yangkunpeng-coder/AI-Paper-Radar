@@ -58,6 +58,17 @@ class PaperLibraryRepository(Protocol):
         sort_mode: str = "interest",
     ) -> list[LibraryPaper]: ...
 
+    def load_all_since(
+        self,
+        updated_after: datetime,
+        *,
+        batch_size: int = 500,
+        domain_key: str | None = None,
+        topic_key: str | None = None,
+        favorites_only: bool = False,
+        sort_mode: str = "interest",
+    ) -> list[LibraryPaper]: ...
+
     def count_since(
         self,
         updated_after: datetime,
@@ -74,9 +85,7 @@ class PaperLibraryRepository(Protocol):
 
     def get_sync_state(self, *, domain_key: str = DOMAIN_EMBODIED) -> SyncState: ...
 
-    def get_domain_paper_versions(
-        self, *, domain_key: str = DOMAIN_EMBODIED
-    ) -> dict[str, str]: ...
+    def get_domain_paper_versions(self, *, domain_key: str = DOMAIN_EMBODIED) -> dict[str, str]: ...
 
     def begin_sync(
         self, *, domain_key: str = DOMAIN_EMBODIED, attempted_at: datetime | None = None
@@ -120,6 +129,15 @@ class PaperLibraryRepository(Protocol):
         model: str,
         domain_key: str = DOMAIN_EMBODIED,
         analyses: Mapping[str, PaperAIAnalysis],
+    ) -> None: ...
+
+    def save_analyses_with_topics(
+        self,
+        *,
+        model: str,
+        domain_key: str = DOMAIN_EMBODIED,
+        analyses: Mapping[str, PaperAIAnalysis],
+        classification_source: str = "deepseek-domain-v1",
     ) -> None: ...
 
     def load_analyses(
@@ -255,34 +273,18 @@ class LibraryService:
         favorites_only: bool = False,
         sort_mode: str = "interest",
     ) -> list[LibraryPaper]:
-        """Load the complete filtered result in bounded repository pages.
-
-        This is reserved for explicit bulk actions such as export and affiliation
-        enrichment. Normal browsing must continue to use paged ``since`` calls.
-        Unlike the historical helper, this method has no silent 5000-row cap.
-        """
+        """Load an export from one repository snapshot; normal browsing stays paged."""
 
         if batch_size < 1:
             raise ValueError("batch_size must be > 0")
-        entries: list[LibraryPaper] = []
-        offset = 0
-        while True:
-            batch = self.repository.load_since(
-                updated_after,
-                limit=batch_size,
-                offset=offset,
-                domain_key=domain_key,
-                topic_key=topic_key,
-                favorites_only=favorites_only,
-                sort_mode=sort_mode,
-            )
-            if not batch:
-                break
-            entries.extend(batch)
-            if len(batch) < batch_size:
-                break
-            offset += len(batch)
-        return entries
+        return self.repository.load_all_since(
+            updated_after,
+            batch_size=batch_size,
+            domain_key=domain_key,
+            topic_key=topic_key,
+            favorites_only=favorites_only,
+            sort_mode=sort_mode,
+        )
 
     def counts_since(
         self,
@@ -308,9 +310,7 @@ class LibraryService:
     def sync_state(self, *, domain_key: str = DOMAIN_EMBODIED) -> SyncState:
         return self.repository.get_sync_state(domain_key=domain_key)
 
-    def domain_paper_versions(
-        self, *, domain_key: str = DOMAIN_EMBODIED
-    ) -> dict[str, str]:
+    def domain_paper_versions(self, *, domain_key: str = DOMAIN_EMBODIED) -> dict[str, str]:
         """Return stable arXiv IDs already classified into one domain.
 
         Sync uses this snapshot as an O(1) membership map so overlap/category
@@ -352,9 +352,7 @@ class LibraryService:
         domain_key: str = DOMAIN_EMBODIED,
         cancelled_at: datetime | None = None,
     ) -> SyncState:
-        return self.repository.cancel_sync(
-            domain_key=domain_key, cancelled_at=cancelled_at
-        )
+        return self.repository.cancel_sync(domain_key=domain_key, cancelled_at=cancelled_at)
 
     def fail_sync(
         self,
@@ -399,6 +397,22 @@ class LibraryService:
             model=model,
             domain_key=domain_key,
             analyses=analyses,
+        )
+
+    def save_analyses_with_topics(
+        self,
+        *,
+        model: str,
+        domain_key: str = DOMAIN_EMBODIED,
+        analyses: Mapping[str, PaperAIAnalysis],
+        classification_source: str = "deepseek-domain-v1",
+    ) -> None:
+        """Persist a batch and its classifications in one repository transaction."""
+        self.repository.save_analyses_with_topics(
+            model=model,
+            domain_key=domain_key,
+            analyses=analyses,
+            classification_source=classification_source,
         )
 
     def analyses_for(

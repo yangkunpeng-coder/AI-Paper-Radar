@@ -46,18 +46,10 @@ class AnalysisService:
                 domain_key=domain_key,
             )
             await asyncio.to_thread(
-                self.library.save_analyses,
+                self.library.save_analyses_with_topics,
                 model=model,
                 domain_key=domain_key,
                 analyses=analyses,
-            )
-            await asyncio.to_thread(
-                self.library.replace_analysis_topics,
-                domain_key=domain_key,
-                topic_keys_by_arxiv_id={
-                    arxiv_id: analysis.topic_keys
-                    for arxiv_id, analysis in analyses.items()
-                },
                 classification_source="deepseek-domain-v1",
             )
             merged.update(analyses)

@@ -64,33 +64,6 @@ class DeepSeekClient:
         }
         self._chat_completion(payload)
 
-    def complete_text(
-        self,
-        *,
-        system_prompt: str,
-        user_prompt: str,
-        max_tokens: int = 2200,
-    ) -> str:
-        """Return a plain-text completion for bounded reading-assistant tasks."""
-
-        if not system_prompt.strip():
-            raise ValueError("system_prompt is required")
-        if not user_prompt.strip():
-            raise ValueError("user_prompt is required")
-        if max_tokens < 1:
-            raise ValueError("max_tokens must be > 0")
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt.strip()},
-                {"role": "user", "content": user_prompt.strip()},
-            ],
-            "thinking": {"type": "disabled"},
-            "max_tokens": int(max_tokens),
-        }
-        response = self._chat_completion(payload)
-        return _extract_message_content(response).strip()
-
     def analyze_papers(
         self,
         papers: Sequence[RankedPaper],

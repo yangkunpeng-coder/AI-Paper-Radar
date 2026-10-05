@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from threading import Event
@@ -11,7 +11,7 @@ from embodied_ai_radar.domain.domain_relevance import (
     classify_topic_keys,
     rank_paper_for_domain,
 )
-from embodied_ai_radar.domain.library import ArxivHarvestProgress
+from embodied_ai_radar.domain.library import ArxivHarvestProgress, base_arxiv_id
 from embodied_ai_radar.domain.llm import PaperAIAnalysis
 from embodied_ai_radar.domain.models import Paper, RankedPaper
 from embodied_ai_radar.domain.research_domains import DOMAIN_EMBODIED, get_research_domain
@@ -81,6 +81,7 @@ class RadarService:
         domain_key: str = DOMAIN_EMBODIED,
         cancel_event: Event | None = None,
         progress_callback: Callable[[ArxivHarvestProgress], None] | None = None,
+        skip_existing_ids: Collection[str] | None = None,
     ) -> RadarResult:
         fetch_range = getattr(self.source, "fetch_date_range", None)
         if fetch_range is None:
@@ -96,7 +97,20 @@ class RadarService:
         if progress_callback is not None:
             kwargs["progress_callback"] = progress_callback
         papers = fetch_range(**kwargs)
-        return self.rank_papers(papers, domain_key=domain.key)
+        # The streaming consumer reserves IDs as it ranks page payloads. Read
+        # this collection AFTER harvesting to avoid ranking those papers twice.
+        candidates = (
+            [paper for paper in papers if base_arxiv_id(paper.arxiv_id) not in skip_existing_ids]
+            if skip_existing_ids is not None
+            else papers
+        )
+        ranked = self.rank_papers(candidates, domain_key=domain.key)
+        return RadarResult(
+            fetched_count=len(papers),
+            papers=ranked.papers,
+            source_note=ranked.source_note,
+            topic_keys_by_arxiv_id=ranked.topic_keys_by_arxiv_id,
+        )
 
     async def refresh_async(
         self,
@@ -118,6 +132,7 @@ class RadarService:
         domain_key: str = DOMAIN_EMBODIED,
         cancel_event: Event | None = None,
         progress_callback: Callable[[ArxivHarvestProgress], None] | None = None,
+        skip_existing_ids: Collection[str] | None = None,
     ) -> RadarResult:
         return await asyncio.to_thread(
             self.sync_range,
@@ -126,6 +141,7 @@ class RadarService:
             domain_key=domain_key,
             cancel_event=cancel_event,
             progress_callback=progress_callback,
+            skip_existing_ids=skip_existing_ids,
         )
 
     async def analyze_async(

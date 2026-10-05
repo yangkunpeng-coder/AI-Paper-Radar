@@ -14,12 +14,10 @@ from pathlib import Path
 import flet as ft
 import flet_secure_storage as fss
 
-from embodied_ai_radar.application.affiliation_service import AffiliationService
 from embodied_ai_radar.application.analysis_service import AnalysisService
 from embodied_ai_radar.application.browse_controller import BrowseController
 from embodied_ai_radar.application.library_service import LibraryService
 from embodied_ai_radar.application.radar_service import RadarService
-from embodied_ai_radar.application.reading_assistant import ReadingAssistantService
 from embodied_ai_radar.application.settings_service import SettingsService
 from embodied_ai_radar.application.sync_service import SyncCoordinator
 from embodied_ai_radar.application.task_registry import TaskRegistry
@@ -29,7 +27,6 @@ from embodied_ai_radar.infrastructure.flet_settings_store import (
     FletPreferenceStore,
     FletSecureSecretStore,
 )
-from embodied_ai_radar.infrastructure.semantic_scholar_client import SemanticScholarClient
 from embodied_ai_radar.infrastructure.sqlite_library import SQLitePaperRepository
 
 
@@ -57,8 +54,6 @@ class MobileServices:
     browse_controller: BrowseController
     sync_coordinator: SyncCoordinator
     analysis_service: AnalysisService
-    reading_assistant_service: ReadingAssistantService
-    affiliation_service: AffiliationService
     settings_service: SettingsService
     task_registry: TaskRegistry
 
@@ -76,8 +71,6 @@ async def create_mobile_services(page: ft.Page) -> MobileServices:
     browse_controller = BrowseController(library_service)
     sync_coordinator = SyncCoordinator(library_service)
     analysis_service = AnalysisService(radar_service, library_service)
-    reading_assistant_service = ReadingAssistantService()
-    affiliation_service = AffiliationService(SemanticScholarClient(), repository)
 
     secure_storage = fss.SecureStorage(
         android_options=fss.AndroidOptions(
@@ -98,8 +91,6 @@ async def create_mobile_services(page: ft.Page) -> MobileServices:
         browse_controller=browse_controller,
         sync_coordinator=sync_coordinator,
         analysis_service=analysis_service,
-        reading_assistant_service=reading_assistant_service,
-        affiliation_service=affiliation_service,
         settings_service=settings_service,
         task_registry=TaskRegistry(),
     )

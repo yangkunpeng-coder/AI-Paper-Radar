@@ -9,7 +9,7 @@
 
 <br>
 
-[**⬇ 下载 v1.2.0 · Windows / Android**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.2.0)
+[**⬇ 下载 Windows / Android**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases)
 &nbsp;&nbsp;·&nbsp;&nbsp;
 [**▶ 平板操作演示**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.1.0-demo_tablet.mp4)
 &nbsp;&nbsp;·&nbsp;&nbsp;
@@ -31,7 +31,7 @@
 
 软件将论文保存在本地 SQLite 数据库中，并可按时间、研究方向、收藏状态等条件筛选；如配置自己的 DeepSeek API Key，还可以直接生成论文快速解读。
 
-> **v1.2.0 发布内容：** 新增 Android APK 与平板使用入口，更新 Windows 64 位发行包。下载附件将在 v1.2.0 Release 发布后提供。
+> **v1.3.0 计划内容：** 新增独立 Android Phone UI，沿用 Tablet 与 Windows 入口。下载附件将在 v1.3.0 Release 发布后提供。
 
 ---
 
@@ -49,7 +49,7 @@
 
 [▶ 查看 / 下载平板操作录屏](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.1.0-demo_tablet.mp4)
 
-平板操作录屏作为 v1.2.0 Release 附件提供，文件名为 `AI-Paper-Radar-v1.1.0-demo_tablet.mp4`。如无法直接播放，请下载后观看。
+平板操作录屏仍引用历史 v1.2.0 Release 附件，文件名为 `AI-Paper-Radar-v1.1.0-demo_tablet.mp4`。如无法直接播放，请下载后观看。
 
 ---
 
@@ -93,11 +93,11 @@
 
 ## 下载与安装
 
-目标发行版本：**v1.2.0**（待发布）
+目标发行版本：**v1.3.0**（待发布）
 
-[**前往 v1.2.0 Release**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.2.0) · [查看已发布版本](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases)
+[**前往 v1.3.0 Release**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases) · [查看已发布版本](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases)
 
-v1.2.0 计划提供以下附件，实际文件名以 Release 的 **Assets** 列表为准：
+v1.3.0 计划提供以下附件，实际文件名以 Release 的 **Assets** 列表为准：
 
 | 平台 | 发行文件 | 使用方式 |
 |---|---|---|
@@ -110,7 +110,7 @@ v1.2.0 计划提供以下附件，实际文件名以 Release 的 **Assets** 列�
 2. **完整解压**到一个文件夹，不要直接在压缩包中运行。
 3. 双击解压目录中的 EXE 启动程序。
 
-> 无需另行安装 Python 或 Flet。请保留 EXE 旁的 DLL、`data`、`Lib`、`site-packages` 等文件和目录，不要仅复制 EXE。v1.2.0 的 Windows 发行方式与 v1.0.0 的单文件 EXE 不同。
+> 无需另行安装 Python 或 Flet。请保留 EXE 旁的 DLL、`data`、`Lib`、`site-packages` 等文件和目录，不要仅复制 EXE。v1.3.0 的 Windows 发行方式与 v1.0.0 的单文件 EXE 不同。
 
 ### Android 平板
 
@@ -181,7 +181,7 @@ certutil -hashfile "实际下载的文件名.zip" SHA256
 certutil -hashfile "实际下载的文件名.apk" SHA256
 ```
 
-输出应与该版本提供的 SHA256 一致。仓库中原有的 `SHA256SUMS.txt` 对应 v1.0.0，不能用于校验 v1.2.0 的新发行包。
+输出应与该版本提供的 SHA256 一致。仓库中原有的 `SHA256SUMS.txt` 对应 v1.0.0，不能用于校验 v1.3.0 的新发行包。
 
 ---
 
@@ -194,9 +194,33 @@ certutil -hashfile "实际下载的文件名.apk" SHA256
 
 ---
 
+## 当前源码
+
+当前源码版本 **v1.3.1**（交互流畅性优化；尚未验证原生界面与发行构建）。SQLite schema v9、workflow revision 1.2.9 不变。
+
+Phone 已实现独立单列列表、论文详情、底部论文/收藏/任务/设置导航和筛选 Bottom Sheet；保留领域筛选与滚动状态，24 条 SQLite 渐进分页、卡片复用与深列表回收；共用移动服务、同步、DeepSeek、收藏和导出。PDF 使用可取消下载、单页渲染、缩放与退出清理。
+
+保留上一轮 SQLite 连接关闭、同步评分去重、Desktop 局部更新与闲置代码清理。
+
+历史演示视频仍指向已有 v1.2.0 附件。
+
 ## 版本记录
 
-### v1.2.0（待发布）
+### v1.3.1（源码完成，本轮不发布）
+
+- 收藏保存成功后立即更新图标，统计数量随后刷新。
+- Phone 复用顶部控件，分页只追加新卡片；区分加载中、空结果与失败重试。
+- Phone 内容加载与偏好保存并行，保存仍按顺序完成。
+- Desktop 合并任务进度局部更新，保留开始/停止/完成即时反馈。
+- Phone PDF 保留最多三页、8 MiB PNG 缓存，退出清空。
+
+### v1.3.0（源码完成，待构建与真机验收）
+
+- 新增 Phone 单列列表、独立详情、底部导航与触控筛选。
+- 新增手机逐页 PDF 阅读、缩放、取消与清理。
+- 手机与桌面、平板继续共用业务核心。
+
+### v1.2.1（上一轮计划）
 
 - 新增 Android APK，支持在平板上使用。
 - 更新 Windows 64 位版本，采用完整目录 ZIP 发行包。
@@ -212,7 +236,7 @@ certutil -hashfile "实际下载的文件名.apk" SHA256
 
 <div align="center">
 
-[**下载 v1.2.0 · Windows / Android**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/tag/v1.2.0)
+[**下载 Windows / Android**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases)
 &nbsp;&nbsp;·&nbsp;&nbsp;
 [**平板演示**](https://github.com/yangkunpeng-coder/AI-Paper-Radar/releases/download/v1.2.0/AI-Paper-Radar-v1.1.0-demo_tablet.mp4)
 &nbsp;&nbsp;·&nbsp;&nbsp;

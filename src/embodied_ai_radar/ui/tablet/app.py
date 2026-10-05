@@ -73,7 +73,6 @@ from embodied_ai_radar.ui.theme import (
     PRIMARY_DARK,
     PRIMARY_SOFT,
     SURFACE,
-    SURFACE_SUBTLE,
     TEXT_PRIMARY,
     TEXT_SECONDARY,
     TEXT_TERTIARY,

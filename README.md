@@ -198,6 +198,8 @@ certutil -hashfile "实际下载的文件名.apk" SHA256
 
 当前源码版本 **v1.3.1**（交互流畅性优化；尚未验证原生界面与发行构建）。SQLite schema v9、workflow revision 1.2.9 不变。
 
+Python 源码包：`src/ai_paper_analyzer`，入口：`src/main.py`。旧数据库文件名、设置键与应用 ID 保留兼容。
+
 Phone 已实现独立单列列表、论文详情、底部论文/收藏/任务/设置导航和筛选 Bottom Sheet；保留领域筛选与滚动状态，24 条 SQLite 渐进分页、卡片复用与深列表回收；共用移动服务、同步、DeepSeek、收藏和导出。PDF 使用可取消下载、单页渲染、缩放与退出清理。
 
 保留上一轮 SQLite 连接关闭、同步评分去重、Desktop 局部更新与闲置代码清理。
